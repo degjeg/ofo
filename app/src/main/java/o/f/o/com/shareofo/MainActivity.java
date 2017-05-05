@@ -2,311 +2,411 @@ package o.f.o.com.shareofo;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.net.NetworkInfo;
-import android.net.wifi.WpsInfo;
-import android.net.wifi.p2p.WifiP2pConfig;
-import android.net.wifi.p2p.WifiP2pDevice;
-import android.net.wifi.p2p.WifiP2pDeviceList;
-import android.net.wifi.p2p.WifiP2pInfo;
-import android.net.wifi.p2p.WifiP2pManager;
 import android.os.Handler;
+import android.os.HandlerThread;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
-import android.util.Log;
+import android.text.Editable;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.TextUtils;
+import android.text.TextWatcher;
+import android.text.style.ForegroundColorSpan;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.animation.RotateAnimation;
+import android.widget.EditText;
 import android.widget.TextView;
-import android.widget.Toast;
 
-import java.net.InetAddress;
+import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.List;
 
-public class MainActivity extends AppCompatActivity {
+import de.greenrobot.dao.query.QueryBuilder;
+import o.f.o.com.shareofo.bean.Device;
+import o.f.o.com.shareofo.db.Db;
+import o.f.o.com.shareofo.db.dao.BicycleDao;
+import o.f.o.com.shareofo.db.model.BicycleData;
+import o.f.o.com.shareofo.net.ShareOfoServer;
+import o.f.o.com.shareofo.net.bean.ShareRequestRequest;
+import o.f.o.com.shareofo.net.common.TcpServer;
+import o.f.o.com.shareofo.net.handlers.ShareDataRequestHandler;
+import o.f.o.com.shareofo.utils.T;
+
+public class MainActivity extends AppCompatActivity implements
+        View.OnClickListener,
+        View.OnLongClickListener,
+        ShareDataRequestHandler {
 
     private static final String TAG = "MainActivity-";
-    // wifi direct
-    IntentFilter intentFilter = new IntentFilter();
-    WifiP2pManager mManager;
-    WifiP2pManager.Channel mChannel;
-    final List<WifiP2pDevice> wifiP2pDeviceList = new ArrayList<>();
 
     // view
-    DeviceListAdapter deviceListAdapter;
+    MainAdapter mainAdapter;
     RecyclerView recyclerView;
-    View emptyView;
-    TextView tvEmpty;
+
+    EditText etId;
+
+    String currentKey;
+    final List<Device> deviceList = new ArrayList<>();
+    final List<MainData> dataList = new ArrayList<>();
+    final List<BicycleData> searchResultList = new ArrayList<>();
+
+    HandlerThread searchThread = new HandlerThread("");
+    Handler handler;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+
         super.onCreate(savedInstanceState);
+
+        fakeData();
         setContentView(R.layout.activity_main);
 
+        initDeviceFounding();
+
         initView();
-        initWifiDirect();
+        searchThread.start();
+        handler = new Handler(searchThread.getLooper());
+        // initWifiDirect();
+
+        ShareOfoServer.get().setShareDataRequestHandler(this);
+        ShareOfoServer.get().startServer();
+    }
+
+    private void fakeData() {
+
+        dataList.add(new MainData(new Device("dsfasdfasd", "193.3.3.3")));
+        dataList.add(new MainData(new Device("sfasf", "193.3.31.3")));
+        dataList.add(new MainData(new Device("asdf", "193.31.3.31")));
+        dataList.add(new MainData(new Device("dsfasdfasdf", "193.3.31.3")));
+
+        dataList.add(new MainData(new BicycleData("331333", "444444")));
+        dataList.add(new MainData(new BicycleData("3313313", "4441444")));
+        dataList.add(new MainData(new BicycleData("3133313", "444444")));
+        dataList.add(new MainData(new BicycleData("4345235424", "444444")));
+
+
+    }
+
+    private void initDeviceFounding() {
+        Intent intent = new Intent(MainActivity.this, DeviceDiscoveryService.class);
+        intent.setAction(DeviceDiscoveryService.ACTION_START_DISCOVERY);
+        startService(intent);
+
+        BroadcastReceiver receiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                // String s = intent.getStringExtra("log");
+                // log(s);
+                deviceList.clear();
+                deviceList.addAll(DeviceDiscoveryService.getDevices());
+                reInitDataList();
+
+            }
+        };
+
+        IntentFilter filter = new IntentFilter(DeviceDiscoveryService.ACTION_DEVICE_FOUND);
+        registerReceiver(receiver, filter);
+    }
+
+    private void reInitDataList() {
+        dataList.clear();
+
+        dataList.add(new MainData(MainData.TYPE_DEVICE_LIST_EMPTY));
+
+        if (!deviceList.isEmpty()) {
+            for (Device device : deviceList) {
+                dataList.add(new MainData(device));
+            }
+        } else {
+
+        }
+
+        for (BicycleData ofoData : searchResultList) {
+            dataList.add(new MainData(ofoData));
+        }
+        mainAdapter.notifyDataSetChanged();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        unregisterReceiver(receiver);
     }
 
 
     @Override
     protected void onResume() {
         super.onResume();
-        registerReceiver(receiver, intentFilter);
     }
 
     private void initView() {
         recyclerView = (RecyclerView) findViewById(R.id.rv);
-        emptyView = findViewById(R.id.empty_view);
 
-        tvEmpty = (TextView) findViewById(R.id.tv_empty);
-
-        deviceListAdapter = new DeviceListAdapter();
+        etId = (EditText) findViewById(R.id.et_id);
+        mainAdapter = new MainAdapter();
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        recyclerView.setAdapter(deviceListAdapter);
-    }
+        recyclerView.setAdapter(mainAdapter);
 
-    private void initWifiDirect() {
-
-
-        //表示Wi-Fi对等网络状态发生了改变
-        intentFilter.addAction(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION);
-
-        //表示可用的对等点的列表发生了改变
-        intentFilter.addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION);
-
-        //表示Wi-Fi对等网络的连接状态发生了改变
-        intentFilter.addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION);
-
-        //设备配置信息发生了改变
-        intentFilter.addAction(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION);
-
-        // registerReceiver(receiver, intentFilter);
-
-        mManager = (WifiP2pManager) getSystemService(Context.WIFI_P2P_SERVICE);
-        mChannel = mManager.initialize(this, getMainLooper(), null);
-
-
-        mManager.discoverPeers(mChannel, new WifiP2pManager.ActionListener() {
-
+        findViewById(R.id.btn_clear).setOnClickListener(this);
+        findViewById(R.id.btn_add).setOnClickListener(this);
+        findViewById(R.id.btn_add).setOnLongClickListener(this);
+        etId.addTextChangedListener(new TextWatcher() {
             @Override
-            public void onSuccess() {
-                //查找初始化成功时的处理写在这里。
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
 
-                //实际上并没有发现任何服务，所以该方法可以置空。
-                //对等点搜索的代码在onReceive方法中，详见下文。
-                Log.e(TAG, "discoverPeers success");
             }
 
             @Override
-            public void onFailure(int reasonCode) {
-                //查找初始化失败时的处理写在这里。
-                //警告用户出错了。
-                Log.e(TAG, "discoverPeers failure " + reasonCode);
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                currentKey = s.toString();
+                //  mainAdapter.notifyDataSetChanged();
+                handler.removeCallbacksAndMessages(null);
+                handler.post(new SearchTask(currentKey));
             }
         });
     }
 
-
-
-
-    private WifiP2pManager.ConnectionInfoListener connectionListener = new WifiP2pManager.ConnectionInfoListener() {
-        @Override
-        public void onConnectionInfoAvailable(WifiP2pInfo info) {
-            // InetAddress在WifiP2pInfo结构体中。
-            String groupOwnerAddress = info.groupOwnerAddress.getHostAddress();
-            Log.e(TAG, "onConnectionInfoAvailable" + info);
-            Log.e(TAG, "onConnectionInfoAvailable" + groupOwnerAddress);
-
-            //组群协商后，就可以确定群主。
-            if (info.groupFormed && info.isGroupOwner) {
-                //针对群主做某些任务。
-                //一种常用的做法是，创建一个服务器线程并接收连接请求。
-            } else if (info.groupFormed) {
-                //其他设备都作为客户端。在这种情况下，你会希望创建一个客户端线程来连接群主。
-            }
-        }
-    };
-    BroadcastReceiver receiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION.equals(action)) {
-                Log.e(TAG, "WIFI_P2P_STATE_CHANGED_ACTION");
-
-                //确定Wi-Fi Direct模式是否已经启用，并提醒Activity。
-                int state = intent.getIntExtra(WifiP2pManager.EXTRA_WIFI_STATE, -1);
-                if (state == WifiP2pManager.WIFI_P2P_STATE_ENABLED) {
-                    setIsWifiP2pEnabled(true);
-                } else {
-                    setIsWifiP2pEnabled(false);
-                }
-            } else if (WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION.equals(action)) {
-                Log.e(TAG, "WIFI_P2P_PEERS_CHANGED_ACTION");
-                if (mManager != null) {
-                    mManager.requestPeers(mChannel, peerListListener);
-                }
-                //对等点列表已经改变！我们可能需要对此做出处理。
-
-            } else if (WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION.equals(action)) {
-                Log.e(TAG, "WIFI_P2P_CONNECTION_CHANGED_ACTION");
-                //连接状态已经改变！我们可能需要对此做出处理。
-
-                NetworkInfo networkInfo = (NetworkInfo) intent.getParcelableExtra(WifiP2pManager.EXTRA_NETWORK_INFO);
-
-                if (networkInfo.isConnected()) {
-
-                    //我们连上了其他的设备，请求连接信息，以找到群主的IP。
-                    mManager.requestConnectionInfo(mChannel, connectionListener);
-                }
-
-            } else if (WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION.equals(action)) {
-                Log.e(TAG, "WIFI_P2P_THIS_DEVICE_CHANGED_ACTION");
-                // DeviceListFragment fragment = (DeviceListFragment) getFragmentManager()
-                //         .findFragmentById(R.id.frag_list);
-                // fragment.updateThisDevice((WifiP2pDevice) intent.getParcelableExtra(
-                //         WifiP2pManager.EXTRA_WIFI_P2P_DEVICE));
-
-            }
-        }
-    };
-
-    private WifiP2pManager.PeerListListener peerListListener = new WifiP2pManager.PeerListListener() {
-        @Override
-        public void onPeersAvailable(WifiP2pDeviceList peerList) {
-            Log.e(TAG, "onPeersAvailable");
-            tvEmpty.clearAnimation();
-            //旧的不去，新的不来
-            wifiP2pDeviceList.clear();
-            wifiP2pDeviceList.addAll(peerList.getDeviceList());
-            notifyDeviceListChanged();
-            //如果AdapterView可以处理该数据，则把变更通知它。比如，如果你有可用对等点的ListView，那就发起一次更新。
-            // ((WiFiPeerListAdapter) getListAdapter()).notifyDataSetChanged();
-            // if (peers.size() == 0) {
-            //     Log.d(WiFiDirectActivity.TAG, "No devices found");
-            //     return;
-            // }
-
-
-        }
-    };
-
-    public void connect(WifiP2pDevice device) {
-
-        // 使用在网络上找到的第一个设备。
-        // WifiP2pDevice device = peers.get(0);
-
-        WifiP2pConfig config = new WifiP2pConfig();
-        config.deviceAddress = device.deviceAddress;
-        config.wps.setup = WpsInfo.PBC;
-
-        mManager.connect(mChannel, config, new WifiP2pManager.ActionListener() {
-
-            @Override
-            public void onSuccess() {
-                // WiFiDirectBroadcastReceiver将会通知我们。现在可以先忽略。
-            }
-
-            @Override
-            public void onFailure(int reason) {
-                Toast.makeText(MainActivity.this, "Connect failed. Retry.", Toast.LENGTH_SHORT).show();
-            }
-        });
-    }
-
-    void notifyDeviceListChanged() {
-        if (wifiP2pDeviceList.size() == 0) {
-            recyclerView.setVisibility(View.GONE);
-            emptyView.setVisibility(View.VISIBLE);
-        } else {
-            recyclerView.setVisibility(View.VISIBLE);
-            emptyView.setVisibility(View.GONE);
-            deviceListAdapter.notifyDataSetChanged();
+    @Override
+    public void onClick(View v) {
+        switch (v.getId()) {
+            case R.id.btn_add:
+                onclickAdd();
+                break;
+            case R.id.btn_clear:
+                onCLickClear();
+                break;
         }
     }
 
-    public void setIsWifiP2pEnabled(boolean isWifiP2pEnabled) {
+    private void onclickAdd() {
+        String code = etId.getText().toString().trim();
+        String password = code + "pw";
+        if (code.isEmpty()) return;
 
-        if (!isWifiP2pEnabled) {
-            recyclerView.setVisibility(View.GONE);
-            emptyView.setVisibility(View.VISIBLE);
-            tvEmpty.setText("已被关闭");
-        } else if (wifiP2pDeviceList.isEmpty()) {
-            recyclerView.setVisibility(View.GONE);
-            emptyView.setVisibility(View.VISIBLE);
-            tvEmpty.setText("已打开,点击搜索周围设备");
-            tvEmpty.setOnClickListener(searchListener);
+        BicycleData ofoData = new BicycleData(code, password);
+        BicycleDao dao = Db.get().getBicycleDao();
+
+        if (dao.queryBuilder()
+                .where(BicycleDao.Properties.Code.eq(code))
+                .where(BicycleDao.Properties.Password.eq(password))
+                .build().list().size() == 0) {
+            dao.insert(ofoData);
         }
     }
 
-    View.OnClickListener searchListener = new View.OnClickListener() {
-        @Override
-        public void onClick(View v) {
-            RotateAnimation rotateAnimation = new RotateAnimation(
-                    0, 360,
-                    RotateAnimation.RELATIVE_TO_SELF, 0.5f,
-                    RotateAnimation.RELATIVE_TO_SELF, 0.5f);
+    private void onCLickClear() {
+        etId.setText("");
+    }
 
-            rotateAnimation.setDuration(1000);
-            rotateAnimation.setRepeatCount(100000);
+    @Override
+    public boolean onLongClick(View v) {
+        Db.get().getBicycleDao().deleteAll();
+        return true;
+    }
 
-            tvEmpty.clearAnimation();
-            tvEmpty.setAnimation(rotateAnimation);
+    @Override
+    public void onShardDataRequest(ShareRequestRequest request, SocketChannel key) {
 
-            new Handler().postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    if (mManager != null) {
-                        mManager.requestPeers(mChannel, peerListListener);
-                    }
-                }
-            }, 1000);
+    }
 
-        }
-    };
 
-    class DeviceListAdapter extends RecyclerView.Adapter<ViewHolder> {
+    class MainAdapter extends RecyclerView.Adapter<ViewHolder> {
         @Override
         public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-            return new ViewHolder(View.inflate(MainActivity.this, R.layout.adapter_device_list, null));
+            switch (viewType) {
+                case MainData.TYPE_DEVICE:
+                    return new DeviceHolder(View.inflate(MainActivity.this, R.layout.adapter_device_list, null));
+                case MainData.TYPE_DEVICE_LIST_EMPTY:
+                    return new DeviceListEmptyHolder(View.inflate(MainActivity.this, R.layout.adapter_device_empty, null));
+                default:
+                    return new SearchResultHolder(View.inflate(MainActivity.this, R.layout.adapter_search_result, null));
+            }
         }
 
         @Override
         public void onBindViewHolder(ViewHolder holder, int position) {
-            holder.bindData(wifiP2pDeviceList.get(position));
+            holder.bindData(getItem(position));
         }
 
         @Override
         public int getItemCount() {
-            return wifiP2pDeviceList.size();
+            return dataList.size(); // wifiP2pDeviceList.size();
+        }
+
+        MainData getItem(int position) {
+            return dataList.get(position);
+        }
+
+        @Override
+        public int getItemViewType(int position) {
+            return getItem(position).type;
         }
     }
 
-    class ViewHolder extends RecyclerView.ViewHolder {
-        final TextView tvDeviceName;
-        final TextView tvDeviceIp;
+    abstract class ViewHolder extends RecyclerView.ViewHolder {
+
 
         public ViewHolder(View v) {
             super(v);
 
-            tvDeviceName = (TextView) v.findViewById(R.id.tv_device_name);
-            tvDeviceIp = (TextView) v.findViewById(R.id.tv_device_ip);
         }
 
-        public void bindData(WifiP2pDevice device) {
-            tvDeviceName.setText(device.deviceName);
-            tvDeviceIp.setText(device.deviceAddress);
+        abstract void bindData(MainData device);
+    }
+
+    class DeviceHolder extends ViewHolder implements View.OnClickListener {
+
+        TextView tvIp, tvName;
+        Device device;
+
+        public DeviceHolder(View v) {
+            super(v);
+            tvIp = (TextView) v.findViewById(R.id.tv_device_ip);
+            tvName = (TextView) v.findViewById(R.id.tv_device_name);
+            v.setOnClickListener(this);
+        }
+
+        @Override
+        void bindData(MainData device) {
+            this.device = device.device;
+
+            tvIp.setText(device.device.getIp());
+            tvName.setText(device.device.getDisplayName());
+        }
+
+        @Override
+        public void onClick(View v) {
+            AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+            builder.setTitle("提示")
+                    .setMessage("和" + device.toString() + " 共享数据?")
+                    .setPositiveButton("共享", new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            T.show("分享数据");
+                        }
+                    })
+                    .setNegativeButton("取消", new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            dialog.dismiss();
+                        }
+                    })
+                    .create()
+                    .show();
+        }
+    }
+
+    class DeviceListEmptyHolder extends ViewHolder {
+        public DeviceListEmptyHolder(View v) {
+            super(v);
+        }
+
+        @Override
+        void bindData(MainData device) {
         }
     }
 
 
+    class SearchResultHolder extends ViewHolder {
+        TextView tvId, tvKey;
+
+        public SearchResultHolder(View v) {
+            super(v);
+            tvId = (TextView) v.findViewById(R.id.tv_id);
+            tvKey = (TextView) v.findViewById(R.id.tv_key);
+        }
+
+        @Override
+        void bindData(MainData device) {
+            SpannableStringBuilder b = new SpannableStringBuilder();
+
+            b.append(device.ofoData.getCode());
+
+            if (currentKey != null) {
+                int pos = device.ofoData.getCode().indexOf(currentKey);
+                int len = currentKey.length();
+                b.setSpan(new ForegroundColorSpan(0xffff0000), pos, pos + len, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+
+            tvId.setText(b);
+            tvKey.setText(device.ofoData.getPassword());
+        }
+    }
+
+    class MainData {
+        public static final int TYPE_DEVICE = 1;
+        public static final int TYPE_DEVICE_LIST_EMPTY = 2;
+        public static final int TYPE_SEARCH_RESULT = 3;
+
+        int type;
+        Device device;
+        BicycleData ofoData;
+
+        public MainData(int type) {
+            this.type = type;
+        }
+
+        public MainData(Device device) {
+            this.device = device;
+            type = TYPE_DEVICE;
+        }
+
+        public MainData(BicycleData ofoData) {
+            this.ofoData = ofoData;
+            type = TYPE_SEARCH_RESULT;
+        }
+    }
+
+
+    class SearchTask implements Runnable {
+        String keyword;
+        boolean isCanel = false;
+
+        public SearchTask(String keyword) {
+            this.keyword = keyword;
+        }
+
+        public void cancel() {
+            isCanel = true;
+        }
+
+        @Override
+        public void run() {
+            BicycleDao dao = Db.get().getBicycleDao();
+            QueryBuilder<BicycleData> qb;
+
+            if (TextUtils.isEmpty(keyword.trim())) {
+                qb = dao.queryBuilder()
+                        .orderDesc(BicycleDao.Properties.Time)
+                        .limit(100);
+            } else {
+                qb = dao.queryBuilder()
+                        .orderDesc(BicycleDao.Properties.Time)
+                        .where(BicycleDao.Properties.Code.like("%" + keyword + "%"));
+            }
+
+
+            final List<BicycleData> result = qb.build().list();
+
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (isCanel) return;
+                    searchResultList.clear();
+                    searchResultList.addAll(result);
+                    reInitDataList();
+                }
+            });
+        }
+    }
 }

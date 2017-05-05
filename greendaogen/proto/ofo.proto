@@ -1,0 +1,43 @@
+package o.f.o.com.shareofo.net.bean;
+
+// option java_package = "com.common.bean";
+message BaseRes {
+    optional int32 retCode = 1;
+    optional string description = 2;
+}
+
+message ShareRequestRequest {
+    optional string device_name = 1;
+    optional string ip = 2;
+    optional bytes alias = 3;
+}
+
+message OfoDate {
+    optional string code = 1;
+    optional string password = 2;
+
+}
+
+message PullData {
+    optional int32 current = 1;
+}
+
+// push data 的请求
+// pull data 的返回
+message DataPack {
+    optional int32 remain = 1;
+    repeated OfoDate data = 2;
+}
+
+// message NotifyExportFinish {
+//     optional int32 count = 1;
+// }
+//
+// message NotifyExportFinish {
+//     optional int32 count = 1;
+// }
+
+// message ShareRequestResponse {
+//     optional int32 len = 1;
+//     optional bytes data = 2;
+// }
