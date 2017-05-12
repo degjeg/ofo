@@ -23,10 +23,11 @@ public class TcpClient {
     // ShareDataRequestHandler shareDataRequestHandler;
     // List<Integer> autorizedConnections = new ArrayList<>();
     PacketHandler packetHandler;
+    PacketParser packetParser;
 
     // 网络通信
     SocketChannel clientSocketChannel;
-    TcpProtocol protocol = new TcpProtocol();
+    TcpConnection connection; //  = new TcpConnection();
     boolean isConnected = false;
 
     public TcpClient() {
@@ -38,9 +39,12 @@ public class TcpClient {
 
     public void setPacketHandler(PacketHandler packetHandler) {
         this.packetHandler = packetHandler;
-        protocol.setPacketHandler(packetHandler);
+        // protocol.setPacketHandler(packetHandler);
     }
 
+    public void setPacketParser(PacketParser packetParser) {
+        this.packetParser = packetParser;
+    }
 
     /**
      * 在指定端口监听
@@ -62,8 +66,9 @@ public class TcpClient {
                     // 创建选择器
                     Selector selector = Selector.open();
 
-                    clientSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
+                    clientSocketChannel.register(selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE);
 
+                    connection = new TcpConnection(clientSocketChannel, packetHandler, packetParser);
                     // 反复循环,等待IO
                     while (true) {
                         // 等待某信道就绪(或超时)
@@ -86,12 +91,12 @@ public class TcpClient {
 
                                 if (key.isReadable()) {
                                     // 从客户端读取数据
-                                    protocol.handleRead(key);
+                                    connection.handleRead(key);
                                 }
 
                                 if (key.isValid() && key.isWritable()) {
                                     // 客户端可写时
-                                    protocol.handleWrite(key);
+                                    connection.handleWrite(key);
                                 }
                             } catch (IOException ex) {
                                 // 出现IO异常（如客户端断开连接）时移除处理过的键
@@ -127,13 +132,14 @@ public class TcpClient {
         }
     }
 
-    public boolean sendData(byte[] peek) {
-        try {
-            clientSocketChannel.write(ByteBuffer.wrap(peek));
-            return true;
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    public boolean sendData(int cmd, byte[] peek, RetPacketHandler handler) {
+        connection.sendPack(cmd, peek, handler);
+        // try {
+        //     clientSocketChannel.write(ByteBuffer.wrap(peek));
+        //     return true;
+        // } catch (IOException e) {
+        //     e.printStackTrace();
+        // }
         return false;
     }
 }

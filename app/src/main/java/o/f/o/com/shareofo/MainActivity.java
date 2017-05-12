@@ -32,8 +32,10 @@ import o.f.o.com.shareofo.bean.Device;
 import o.f.o.com.shareofo.db.Db;
 import o.f.o.com.shareofo.db.dao.BicycleDao;
 import o.f.o.com.shareofo.db.model.BicycleData;
+import o.f.o.com.shareofo.net.ShareOfoClient;
 import o.f.o.com.shareofo.net.ShareOfoServer;
 import o.f.o.com.shareofo.net.bean.ShareRequestRequest;
+import o.f.o.com.shareofo.net.common.TcpConnection;
 import o.f.o.com.shareofo.net.common.TcpServer;
 import o.f.o.com.shareofo.net.handlers.ShareDataRequestHandler;
 import o.f.o.com.shareofo.utils.T;
@@ -215,7 +217,7 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     @Override
-    public void onShardDataRequest(ShareRequestRequest request, SocketChannel key) {
+    public void onShardDataRequest(ShareRequestRequest request, TcpConnection connection) {
 
     }
 
@@ -286,23 +288,25 @@ public class MainActivity extends AppCompatActivity implements
 
         @Override
         public void onClick(View v) {
-            AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-            builder.setTitle("提示")
-                    .setMessage("和" + device.toString() + " 共享数据?")
-                    .setPositiveButton("共享", new DialogInterface.OnClickListener() {
-                        @Override
-                        public void onClick(DialogInterface dialog, int which) {
-                            T.show("分享数据");
-                        }
-                    })
-                    .setNegativeButton("取消", new DialogInterface.OnClickListener() {
-                        @Override
-                        public void onClick(DialogInterface dialog, int which) {
-                            dialog.dismiss();
-                        }
-                    })
-                    .create()
-                    .show();
+            ShareOfoClient.get().requestShareData(device.getIp(), ShareOfoServer.PORT);
+           // lertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+           // uilder.setTitle("提示")
+           //        .setMessage("和" + device.toString() + " 共享数据?")
+           //        .setPositiveButton("共享", new DialogInterface.OnClickListener() {
+           //            @Override
+           //            public void onClick(DialogInterface dialog, int which) {
+           //                // T.show("分享数据");
+           //
+           //            }
+           //        })
+           //        .setNegativeButton("取消", new DialogInterface.OnClickListener() {
+           //            @Override
+           //            public void onClick(DialogInterface dialog, int which) {
+           //                dialog.dismiss();
+           //            }
+           //        })
+           //        .create()
+           //        .show();
         }
     }
 

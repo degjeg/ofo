@@ -38,6 +38,12 @@ public class MyByteBuffer {
             return;
         }
 
+        if (byteBuffer.position() == 0) {
+            byteBuffer.position(byteBuffer.limit());
+            byteBuffer.limit(byteBuffer.capacity());
+            return;
+        }
+
         byte[] d = new byte[remaining];
         byteBuffer.get(d);
         byteBuffer.clear();

@@ -2,16 +2,23 @@ package o.f.o.com.shareofo.net.common;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
+
+import o.f.o.com.shareofo.utils.L;
 
 /**
  * Created by Administrator on 2017/5/5.
  */
 public class TcpServer {
-    public static final int DEFAULT_PORT = 9999;
+
     // 超时时间，单位毫秒
     private static final int timeout = 3000;
 
@@ -20,10 +27,11 @@ public class TcpServer {
     // ShareDataRequestHandler shareDataRequestHandler;
     // List<Integer> autorizedConnections = new ArrayList<>();
     PacketHandler packetHandler;
+    PacketParser packetParser;
 
     // 网络通信
     ServerSocketChannel serverSocketChannel;
-    TcpProtocol protocol = new TcpProtocol();
+    HashMap<SocketChannel, TcpConnection> connections = new HashMap<>();
 
     public TcpServer() {
     }
@@ -34,11 +42,30 @@ public class TcpServer {
 
     public void setPacketHandler(PacketHandler packetHandler) {
         this.packetHandler = packetHandler;
-        protocol.setPacketHandler(packetHandler);
     }
 
-    public void startServer() {
-        startServer(DEFAULT_PORT);
+    public void setPacketParser(PacketParser packetParser) {
+        this.packetParser = packetParser;
+    }
+
+
+    /**
+     * 接收一个SocketChannel的处理
+     *
+     * @param key
+     * @throws IOException
+     */
+
+    void handleAccept(SelectionKey key) throws IOException {
+        SocketChannel clientChannel = ((ServerSocketChannel) key.channel()).accept();
+        clientChannel.configureBlocking(false);
+        clientChannel.register(key.selector(), SelectionKey.OP_READ, ByteBuffer.allocate(TcpConnection.bufferSize));
+
+        TcpConnection connection = new TcpConnection(clientChannel,
+                packetHandler, packetParser
+        );
+        L.get().e(TcpConnection.TAG, "new connection:" + connection);
+        connections.put(clientChannel, connection);
     }
 
     /**
@@ -72,33 +99,46 @@ public class TcpServer {
 
                         // 取得迭代器.selectedKeys()中包含了每个准备好某一I/O操作的信道的SelectionKey
                         Iterator<SelectionKey> keyIter = selector.selectedKeys().iterator();
-
+                        TcpConnection connection = null;
                         while (keyIter.hasNext()) {
                             SelectionKey key = keyIter.next();
+
 
                             try {
                                 if (key.isAcceptable()) {
                                     // 有客户端连接请求时
-                                    protocol.handleAccept(key);
+                                    handleAccept(key);
+                                    continue;
                                 }
 
-                                if (key.isReadable()) {
-                                    // 从客户端读取数据
-                                    protocol.handleRead(key);
+                                SocketChannel socketChannel = (SocketChannel) key.channel();
+                                connection = connections.get(socketChannel);
+                                if (connection == null) {
+                                    continue;
                                 }
+                                if (!key.isValid()) {
+                                    connection.close();
+                                    connections.remove(socketChannel);
+                                } else {
+                                    if (key.isReadable()) {
+                                        // 从客户端读取数据
+                                        connection.handleRead(key);
+                                    }
 
-                                if (key.isValid() && key.isWritable()) {
-                                    // 客户端可写时
-                                    protocol.handleWrite(key);
+                                    if (key.isWritable()) {
+                                        // 客户端可写时
+                                        connection.handleWrite(key);
+                                    }
                                 }
-                            } catch (IOException ex) {
+                            } catch (Exception ex) {
+                                L.get().e(TcpConnection.TAG, "", ex);
                                 // 出现IO异常（如客户端断开连接）时移除处理过的键
+                                if (connection != null) connection.close();
+                                if (key.channel() instanceof SocketChannel)
+                                    connections.remove(key.channel());
+                            } finally {
                                 keyIter.remove();
-                                continue;
                             }
-
-                            // 移除处理过的键
-                            keyIter.remove();
                         }
                     }
                 } catch (IOException e) {
@@ -113,12 +153,20 @@ public class TcpServer {
         try {
             if (serverSocketChannel != null)
                 serverSocketChannel.close();
+
+            Iterator<TcpConnection> it = connections.values().iterator();
+
+            while (it.hasNext()) {
+                TcpConnection connection = it.next();
+                connection.close();
+            }
+
+            connections.clear();
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
             serverSocketChannel = null;
         }
-
     }
 
     // public void reject(int connectionId) {

@@ -6,5 +6,5 @@ import java.nio.channels.SocketChannel;
  * Created by Administrator on 2017/5/5.
  */
 public interface PacketHandler {
-    void handlePack(Pack pack, SocketChannel key);
+    void handlePack(Packet pack, TcpConnection connection);
 }
