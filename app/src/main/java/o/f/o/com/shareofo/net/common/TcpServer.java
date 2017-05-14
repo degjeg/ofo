@@ -7,10 +7,8 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.List;
 
 import o.f.o.com.shareofo.utils.L;
 
@@ -28,6 +26,7 @@ public class TcpServer {
     // List<Integer> autorizedConnections = new ArrayList<>();
     PacketHandler packetHandler;
     PacketParser packetParser;
+    ConnectionListener connectionListener;
 
     // 网络通信
     ServerSocketChannel serverSocketChannel;
@@ -48,6 +47,9 @@ public class TcpServer {
         this.packetParser = packetParser;
     }
 
+    public void setConnectionListener(ConnectionListener connectionListener) {
+        this.connectionListener = connectionListener;
+    }
 
     /**
      * 接收一个SocketChannel的处理
@@ -64,8 +66,10 @@ public class TcpServer {
         TcpConnection connection = new TcpConnection(clientChannel,
                 packetHandler, packetParser
         );
-        L.get().e(TcpConnection.TAG, "new connection:" + connection);
+        L.get().e(connection.TAG, "new connection:" + connection);
         connections.put(clientChannel, connection);
+
+        connection.setConnectionListener(connectionListener);
     }
 
     /**
@@ -131,11 +135,12 @@ public class TcpServer {
                                     }
                                 }
                             } catch (Exception ex) {
-                                L.get().e(TcpConnection.TAG, "", ex);
+                                L.get().e(TcpConnection.TAG_, "", ex);
                                 // 出现IO异常（如客户端断开连接）时移除处理过的键
-                                if (connection != null) connection.close();
-                                if (key.channel() instanceof SocketChannel)
+                                if (connection != null) {
+                                    connection.close();
                                     connections.remove(key.channel());
+                                }
                             } finally {
                                 keyIter.remove();
                             }

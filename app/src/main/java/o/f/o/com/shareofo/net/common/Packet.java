@@ -1,8 +1,6 @@
 package o.f.o.com.shareofo.net.common;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
@@ -32,7 +30,7 @@ public class Packet {
     }
 
     public int getPackContentLen() {
-        return packLen - 6;
+        return packLen - HEADER_LEN;
     }
 
     public void setPackLen(int packLen) {

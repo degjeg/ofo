@@ -6,6 +6,7 @@ package o.f.o.com.shareofo.net.common;
 public interface RetPacketHandler {
     int ERR_TIMEOUT = -1;
     int ERR_CONNECT_FAIL = -2;
+    int ERR_CLOSED = -3;
 
     void onGetReturnPacket(Packet pack);
 

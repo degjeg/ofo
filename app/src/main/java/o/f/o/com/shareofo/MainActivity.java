@@ -2,14 +2,12 @@ package o.f.o.com.shareofo;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
-import android.os.Bundle;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.text.Editable;
@@ -23,7 +21,6 @@ import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.TextView;
 
-import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -36,9 +33,7 @@ import o.f.o.com.shareofo.net.ShareOfoClient;
 import o.f.o.com.shareofo.net.ShareOfoServer;
 import o.f.o.com.shareofo.net.bean.ShareRequestRequest;
 import o.f.o.com.shareofo.net.common.TcpConnection;
-import o.f.o.com.shareofo.net.common.TcpServer;
 import o.f.o.com.shareofo.net.handlers.ShareDataRequestHandler;
-import o.f.o.com.shareofo.utils.T;
 
 public class MainActivity extends AppCompatActivity implements
         View.OnClickListener,
@@ -266,7 +261,9 @@ public class MainActivity extends AppCompatActivity implements
         abstract void bindData(MainData device);
     }
 
-    class DeviceHolder extends ViewHolder implements View.OnClickListener {
+    class DeviceHolder extends ViewHolder implements
+            View.OnClickListener,
+            View.OnLongClickListener {
 
         TextView tvIp, tvName;
         Device device;
@@ -276,6 +273,7 @@ public class MainActivity extends AppCompatActivity implements
             tvIp = (TextView) v.findViewById(R.id.tv_device_ip);
             tvName = (TextView) v.findViewById(R.id.tv_device_name);
             v.setOnClickListener(this);
+            v.setOnLongClickListener(this);
         }
 
         @Override
@@ -289,24 +287,30 @@ public class MainActivity extends AppCompatActivity implements
         @Override
         public void onClick(View v) {
             ShareOfoClient.get().requestShareData(device.getIp(), ShareOfoServer.PORT);
-           // lertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-           // uilder.setTitle("提示")
-           //        .setMessage("和" + device.toString() + " 共享数据?")
-           //        .setPositiveButton("共享", new DialogInterface.OnClickListener() {
-           //            @Override
-           //            public void onClick(DialogInterface dialog, int which) {
-           //                // T.show("分享数据");
-           //
-           //            }
-           //        })
-           //        .setNegativeButton("取消", new DialogInterface.OnClickListener() {
-           //            @Override
-           //            public void onClick(DialogInterface dialog, int which) {
-           //                dialog.dismiss();
-           //            }
-           //        })
-           //        .create()
-           //        .show();
+            // lertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+            // uilder.setTitle("提示")
+            //        .setMessage("和" + device.toString() + " 共享数据?")
+            //        .setPositiveButton("共享", new DialogInterface.OnClickListener() {
+            //            @Override
+            //            public void onClick(DialogInterface dialog, int which) {
+            //                // T.show("分享数据");
+            //
+            //            }
+            //        })
+            //        .setNegativeButton("取消", new DialogInterface.OnClickListener() {
+            //            @Override
+            //            public void onClick(DialogInterface dialog, int which) {
+            //                dialog.dismiss();
+            //            }
+            //        })
+            //        .create()
+            //        .show();
+        }
+
+        @Override
+        public boolean onLongClick(View v) {
+            ShareOfoClient.get().close();
+            return true;
         }
     }
 

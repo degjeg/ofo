@@ -2,19 +2,15 @@ package o.f.o.com.shareofo.net.common;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.sql.ClientInfoStatus;
 import java.util.Iterator;
 
 /**
  * Created by Administrator on 2017/5/5.
  */
 public class TcpClient {
-    public static final int DEFAULT_PORT = 9999;
     // 超时时间，单位毫秒
     private static final int timeout = 3000;
 
@@ -26,9 +22,11 @@ public class TcpClient {
     PacketParser packetParser;
 
     // 网络通信
-    SocketChannel clientSocketChannel;
     TcpConnection connection; //  = new TcpConnection();
     boolean isConnected = false;
+
+    ConnectionListener connectionListener;
+    final Object lock = new Object();
 
     public TcpClient() {
     }
@@ -46,29 +44,39 @@ public class TcpClient {
         this.packetParser = packetParser;
     }
 
+    public void setConnectionListener(ConnectionListener connectionListener) {
+        this.connectionListener = connectionListener;
+    }
+
     /**
      * 在指定端口监听
      *
      * @param port
      */
     public void connectServer(final String host, final int port) {
-        if (isConnected) {
-            return;
+        synchronized (lock) {
+            if (isConnected) {
+                return;
+            }
+            isConnected = true;
         }
+
         new Thread() {
             @Override
             public void run() {
                 try {
-                    clientSocketChannel = SocketChannel.open(new InetSocketAddress(host, port));
+                    SocketChannel clientSocketChannel = SocketChannel.open(new InetSocketAddress(host, port));
                     clientSocketChannel.configureBlocking(false);
 
-                    isConnected = true;
+
                     // 创建选择器
                     Selector selector = Selector.open();
 
                     clientSocketChannel.register(selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE);
 
                     connection = new TcpConnection(clientSocketChannel, packetHandler, packetParser);
+                    connection.setConnectionListener(connectionListener);
+
                     // 反复循环,等待IO
                     while (true) {
                         // 等待某信道就绪(或超时)
@@ -89,27 +97,34 @@ public class TcpClient {
                                 //     protocol.handleAccept(key);
                                 // }
 
-                                if (key.isReadable()) {
-                                    // 从客户端读取数据
-                                    connection.handleRead(key);
-                                }
+                                synchronized (lock) {
+                                    if (connection != null) {
+                                        if (key.isReadable()) {
+                                            // 从客户端读取数据
+                                            connection.handleRead(key);
+                                        }
 
-                                if (key.isValid() && key.isWritable()) {
-                                    // 客户端可写时
-                                    connection.handleWrite(key);
+                                        if (key.isValid() && key.isWritable()) {
+                                            // 客户端可写时
+                                            connection.handleWrite(key);
+                                        }
+                                    }
                                 }
                             } catch (IOException ex) {
                                 // 出现IO异常（如客户端断开连接）时移除处理过的键
-                                keyIter.remove();
+                                throw ex;
+                            } catch (Exception ex) {
+                                // 出现IO异常（如客户端断开连接）时移除处理过的键
                                 continue;
+                            } finally {
+                                // 移除处理过的键
+                                keyIter.remove();
                             }
-
-                            // 移除处理过的键
-                            keyIter.remove();
                         }
                     }
-                } catch (IOException e) {
+                } catch (Exception e) {
                     e.printStackTrace();
+                } finally {
                     close();
                 }
             }
@@ -122,13 +137,16 @@ public class TcpClient {
 
     public void close() {
         try {
-            if (clientSocketChannel != null)
-                clientSocketChannel.close();
-        } catch (IOException e) {
+            synchronized (lock) {
+                if (connection != null) {
+                    connection.close();
+                }
+            }
+        } catch (Exception e) {
             e.printStackTrace();
         } finally {
             isConnected = false;
-            clientSocketChannel = null;
+            connection = null;
         }
     }
 
@@ -141,5 +159,9 @@ public class TcpClient {
         //     e.printStackTrace();
         // }
         return false;
+    }
+
+    public TcpConnection getConnection() {
+        return connection;
     }
 }

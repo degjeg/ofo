@@ -1,14 +1,15 @@
 package o.f.o.com.shareofo.net.common;
 
+import android.os.Handler;
+import android.os.Looper;
+
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.Queue;
-import java.util.concurrent.LinkedBlockingDeque;
 
 import o.f.o.com.shareofo.utils.L;
 
@@ -17,7 +18,8 @@ import o.f.o.com.shareofo.utils.L;
  */
 
 public class TcpConnection {
-    public static final String TAG = "tcp-";
+    public static final String TAG_ = "tcp-";
+    public final String TAG; // = "tcp-";
 
     public static int ID = 1;
     public static int REQ_CODE = 1;
@@ -25,13 +27,15 @@ public class TcpConnection {
     SocketChannel channel;
 
 
-    public static int bufferSize = 10 * 1024;
+    public static int bufferSize = 1024;
 
+    ByteBuffer recvCache = ByteBuffer.allocate(100 * 1024);
     PacketHandler packetHandler;
     PacketParser packetParser;
     int headerLen;
 
     Packet packet = new Packet();
+    ConnectionListener connectionListener;
 
     // final Queue<DefRetPackHandler> pendingPackets = new LinkedBlockingDeque<>();
     final ArrayList<DefRetPackHandler> pendingPackets = new ArrayList<>();
@@ -46,6 +50,8 @@ public class TcpConnection {
         setPacketHandler(packetHandler);
         setPacketParser(packetParser);
         this.id = ++ID;
+
+        TAG = String.format("tcp-con[%d]", id);
     }
 
     public void setPacketHandler(PacketHandler packetHandler) {
@@ -57,6 +63,20 @@ public class TcpConnection {
         headerLen = packetParser.getHeaderLen();
     }
 
+    public void setConnectionListener(ConnectionListener connectionListener) {
+        this.connectionListener = connectionListener;
+        if (connectionListener != null) {
+            new Handler(Looper.getMainLooper()).post(new Runnable() {
+                @Override
+                public void run() {
+                    if (TcpConnection.this.connectionListener != null) {
+                        TcpConnection.this.connectionListener.onConnected(TcpConnection.this);
+                    }
+                }
+            });
+        }
+    }
+
     public void sendPack(int cmd, byte[] data, RetPacketHandler handler) {
         Packet reqPack = new Packet();
 
@@ -64,12 +84,27 @@ public class TcpConnection {
         reqPack.setReqCode((short) ++REQ_CODE);
         reqPack.setPackData(data);
 
+        sendPack(reqPack, handler);
+        // channel.k.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
+
+    }
+
+    public void sendPack(Packet reqPack, RetPacketHandler handler) {
         synchronized (pendingPackets) {
             pendingPackets.add(new DefRetPackHandler(handler, reqPack));
         }
 
-        // channel.k.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
+        new Thread() {
+            @Override
+            public void run() {
+                try {
 
+                    handleWrite(null);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }.start();
     }
 
     public void sendPack(int cmd, String data, RetPacketHandler handler) {
@@ -81,7 +116,29 @@ public class TcpConnection {
     }
 
     public void close() {
+        try {
+            channel.close();
+            // L.get().e(TAG, "close", new Exception());
 
+            new Handler(Looper.getMainLooper()).post(new Runnable() {
+                @Override
+                public void run() {
+                    if (TcpConnection.this.connectionListener != null) {
+                        TcpConnection.this.connectionListener.onClosed(TcpConnection.this);
+                        TcpConnection.this.connectionListener = null;
+                    }
+
+                    while (pendingPackets.size() > 0) {
+                        DefRetPackHandler h = pendingPackets.remove(0);
+                        if (h != null && h.handler != null) {
+                            h.handler.onGetReturnPacketError(RetPacketHandler.ERR_CLOSED, null);
+                        }
+                    }
+                }
+            });
+        } catch (IOException e) {
+            // e.printStackTrace();
+        }
     }
 
     /**
@@ -98,7 +155,7 @@ public class TcpConnection {
         if (clientChannel == null) return;
 
         // 得到并清空缓冲区
-        ByteBuffer buffer = (ByteBuffer) key.attachment();
+        ByteBuffer buffer = recvCache; // (ByteBuffer) key.attachment();
 
         if (buffer == null) return;
 
@@ -109,9 +166,11 @@ public class TcpConnection {
         long bytesRead = clientChannel.read(buffer);
 
 
+        L.get().e(TAG, "received:" + bytesRead + " bytes");
         if (bytesRead == -1) {
             // 没有读取到内容的情况
-            clientChannel.close();
+            // close();
+            throw new ClosedChannelException();
         }
 
         myByteBuffer.forRead();
@@ -120,6 +179,10 @@ public class TcpConnection {
             buffer.get(rawHeaderData); // 读出包头
 
             packetParser.parseHeader(rawHeaderData, packet);
+            if (packet.getPackContentLen() > 100 * 1024) {
+                buffer.clear();
+                return;
+            }
 
             if (buffer.remaining() < packet.getPackContentLen()) {
                 buffer.position(buffer.position() - headerLen); // 把已经读出的包头放回去
@@ -145,15 +208,17 @@ public class TcpConnection {
 
     private void handlePack(Packet packet) {
         L.get().e(TAG, "recv a pack:" + packet.toString1());
-
-        if (packetHandler != null) packetHandler.handlePack(packet, this);
-
         for (int i = 0; i < pendingPackets.size(); i++) {
-            if (pendingPackets.get(i).reqPack.reqCode == packet.reqCode) {
-                pendingPackets.get(i).handler.onGetReturnPacket(packet);
+            if (pendingPackets.get(i).hasSent
+                    && pendingPackets.get(i).reqPack.reqCode == packet.reqCode) {
+                if (pendingPackets.get(i).handler != null) {
+                    pendingPackets.get(i).handler.onGetReturnPacket(packet);
+                }
+
                 pendingPackets.remove(i--);
             }
         }
+        if (packetHandler != null) packetHandler.handlePack(packet, this);
     }
 
     /**
