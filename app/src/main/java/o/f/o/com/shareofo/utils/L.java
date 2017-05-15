@@ -90,7 +90,7 @@ public class L {
         }
 
         File sdcardDir = Environment.getExternalStorageDirectory();
-        File logDir = new File(sdcardDir + "/Android/data/" + "attendance.mll.com.check" + "/log");
+        File logDir = new File(sdcardDir + "/Android/data/" + "o.f.o.com.shareofo" + "/log");
         if (!logDir.exists()) {
             if (!logDir.mkdirs()) {
                 return null;

@@ -3,37 +3,81 @@ package o.f.o.com.shareofo.net;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
 
+import o.f.o.com.shareofo.net.common.MyByteBuffer;
 import o.f.o.com.shareofo.net.common.Packet;
+import o.f.o.com.shareofo.utils.L;
 
 /**
  * Created by Administrator on 2017/5/12.
  */
 
 public class PacketParser implements o.f.o.com.shareofo.net.common.PacketParser {
-    @Override
-    public int getHeaderLen() {
-        return 8;
-    }
+    Packet packet = new Packet();
 
     @Override
-    public int parsePacket(Packet packet) {
+    public Packet parsePacket(ByteBuffer buffer) {
 
-        return 0;
-    }
+        int HEADER_LEN = packet.HEADER_LEN;
+        byte[] rawHeaderData = new byte[HEADER_LEN];
 
-    @Override
-    public int parseHeader(byte[] rawHeaderData, Packet packet) {
+        MyByteBuffer myByteBuffer = new MyByteBuffer(buffer);
+        myByteBuffer.forRead();
+
+
+        // 1.不足包头的长度
+        if (buffer.remaining() < HEADER_LEN) {
+            myByteBuffer.rewind();
+            return null;
+        }
+        buffer.get(rawHeaderData); // 读出包头
+
+        Packet packet = this.packet;
+
         DataInputStream dis = new DataInputStream(new ByteArrayInputStream(rawHeaderData));
         try {
 
             packet.setPackLen(dis.readInt());
             packet.setCmd(dis.readShort());
             packet.setReqCode(dis.readShort());
+            packet.setCheckBit(dis.readInt());
         } catch (IOException e) {
             // e.printStackTrace();
             // should happen
         }
-        return 0;
+
+        // 返回小于0的数字代表异常情况,包太长,不符合规范
+        if (packet.getPackContentLen() > 100 * 1024) {
+            buffer.clear();
+            throw new RuntimeException(String.format("Invalid pack length:%d", packet.getPackContentLen()));
+        }
+
+        // 包还没有接收完
+        if (buffer.remaining() < packet.getPackContentLen()) {
+            buffer.position(buffer.position() - HEADER_LEN); // 把已经读出的包头放回去
+            myByteBuffer.rewind();
+            return null; //  2;
+        }
+
+        if (packet.getPackContentLen() > 0) { // 读出包体内容
+            byte[] packData = new byte[packet.getPackContentLen()];
+            buffer.get(packData);
+
+            if (Arrays.hashCode(packData) != packet.getCheckBit()) {
+                buffer.clear();
+                L.get().e("tcp-", "content received error:" + Arrays.toString(packData));
+                throw new RuntimeException("check failed");
+            } else {
+                L.get().e("tcp-", "content received right:" + Arrays.toString(packData));
+            }
+            packet.setPackData(packData);
+        }
+
+        myByteBuffer.rewind();
+
+        this.packet = new Packet();
+        return packet;
     }
 }

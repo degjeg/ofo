@@ -3,13 +3,15 @@ package o.f.o.com.shareofo.net.common;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Array;
+import java.util.Arrays;
 
 /**
  * Created by Administrator on 2017/5/5.
  */
 
 public class Packet {
-    public static final int HEADER_LEN = 8;
+    public static final int HEADER_LEN = 12;
     public static final int MAX_PACK_LEN = 1024 * 1024;
 
     // header,一共6字节
@@ -17,12 +19,13 @@ public class Packet {
     short cmd;   // 2B
     short reqCode;   // 2B
 
+
     // content
     byte[] packData;
+    int checkBit; // hash 检验
 
     public Packet() {
     }
-
 
 
     public int getPackLen() {
@@ -53,13 +56,25 @@ public class Packet {
         this.reqCode = reqCode;
     }
 
+    public int getCheckBit() {
+        return checkBit;
+    }
+
+    public void setCheckBit(int checkBit) {
+        this.checkBit = checkBit;
+    }
+
     public byte[] getPackData() {
         return packData;
     }
 
     public void setPackData(byte[] packData) {
         this.packData = packData;
-        packLen = HEADER_LEN + ((packData == null) ? 0 : packData.length);
+        packLen = HEADER_LEN; //  + ((packData == null) ? 0 : packData.length);
+        if (packData != null) {
+            packLen += packData.length;
+            checkBit = Arrays.hashCode(packData);
+        }
     }
 
     public byte[] toByteArray() {
@@ -70,7 +85,11 @@ public class Packet {
             dis.writeInt(packLen);
             dis.writeShort(cmd);
             dis.writeShort(reqCode);
-            if (packData != null) dis.write(packData);
+            dis.writeInt(checkBit);
+
+            if (packData != null) {
+                dis.write(packData);
+            }
         } catch (IOException e) {
             // e.printStackTrace();
             // should happen
@@ -85,8 +104,10 @@ public class Packet {
                 .append(cmd)
                 .append("]")
                 .append(reqCode)
+                .append(",len:")
+                .append(getPackContentLen())
                 .append(",")
-                .append(packData == null ? "" : new String(packData))
+                // .append(packData == null ? "" : new String(packData))
                 .toString();
     }
 }

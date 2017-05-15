@@ -1,13 +1,15 @@
 package o.f.o.com.shareofo.net.common;
 
+import java.nio.ByteBuffer;
+
 /**
  * Created by Administrator on 2017/5/12.
  */
 
 public interface PacketParser {
-    int getHeaderLen();
+    // int getHeaderLen();
 
-    int parsePacket(Packet packet);
+    Packet parsePacket(ByteBuffer buffer);
 
-    int parseHeader(byte[] rawHeaderData, Packet packet);
+    // int parseHeader(byte[] rawHeaderData, Packet packet);
 }
