@@ -30,9 +30,14 @@ public class TcpServer {
 
     // 网络通信
     ServerSocketChannel serverSocketChannel;
-    HashMap<SocketChannel, TcpConnection> connections = new HashMap<>();
+    TcpConnectionManager connectionManager;
 
     public TcpServer() {
+        try {
+            connectionManager = new TcpConnectionManager("ser");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     // public static TcpServer get() {
@@ -61,15 +66,17 @@ public class TcpServer {
     void handleAccept(SelectionKey key) throws IOException {
         SocketChannel clientChannel = ((ServerSocketChannel) key.channel()).accept();
         clientChannel.configureBlocking(false);
-        clientChannel.register(key.selector(), SelectionKey.OP_READ, ByteBuffer.allocate(TcpConnection.bufferSize));
+        // SelectionKey selectionKey = clientChannel.register(key.selector(), SelectionKey.OP_READ, ByteBuffer.allocate(TcpConnection.bufferSize));
 
-        TcpConnection connection = new TcpConnection(clientChannel,
-                packetHandler, packetParser
-        );
-        L.get().e(connection.TAG, "new connection:" + connection);
-        connections.put(clientChannel, connection);
+        TcpConnection connection = new TcpConnection(clientChannel, packetHandler, packetParser);
+        L.get().e(connection.TAG, "new connection on ser:" + connection);
 
+
+        connectionManager.registerConnection(connection);
         connection.setConnectionListener(connectionListener);
+        // connections.put(clientChannel, connection);
+
+
     }
 
     /**
@@ -115,32 +122,32 @@ public class TcpServer {
                                     continue;
                                 }
 
-                                SocketChannel socketChannel = (SocketChannel) key.channel();
-                                connection = connections.get(socketChannel);
-                                if (connection == null) {
-                                    continue;
-                                }
-                                if (!key.isValid()) {
-                                    connection.close();
-                                    connections.remove(socketChannel);
-                                } else {
-                                    if (key.isReadable()) {
-                                        // 从客户端读取数据
-                                        connection.handleRead(key);
-                                    }
-
-                                    if (key.isWritable()) {
-                                        // 客户端可写时
-                                        connection.handleWrite(key);
-                                    }
-                                }
+                                // SocketChannel socketChannel = (SocketChannel) key.channel();
+                                // connection = connections.get(socketChannel);
+                                // if (connection == null) {
+                                //     continue;
+                                // }
+                                // if (!key.isValid()) {
+                                //     connection.close();
+                                //     connections.remove(socketChannel);
+                                // } else {
+                                //     if (key.isReadable()) {
+                                //         // 从客户端读取数据
+                                //         connection.handleRead(key);
+                                //     }
+                                //
+                                //     if (key.isWritable()) {
+                                //         // 客户端可写时
+                                //         connection.handleWrite(key);
+                                //     }
+                                // }
                             } catch (Exception ex) {
                                 L.get().e(TcpConnection.TAG_, "", ex);
                                 // 出现IO异常（如客户端断开连接）时移除处理过的键
-                                if (connection != null) {
-                                    connection.close();
-                                    connections.remove(key.channel());
-                                }
+                                // if (connection != null) {
+                                //     connection.close();
+                                //     connections.remove(key.channel());
+                                // }
                             } finally {
                                 keyIter.remove();
                             }
@@ -159,14 +166,14 @@ public class TcpServer {
             if (serverSocketChannel != null)
                 serverSocketChannel.close();
 
-            Iterator<TcpConnection> it = connections.values().iterator();
-
-            while (it.hasNext()) {
-                TcpConnection connection = it.next();
-                connection.close();
-            }
-
-            connections.clear();
+            // Iterator<TcpConnection> it = connections.values().iterator();
+            //
+            // while (it.hasNext()) {
+            //     TcpConnection connection = it.next();
+            //     connection.close();
+            // }
+            //
+            // connections.clear();
         } catch (IOException e) {
             e.printStackTrace();
         } finally {

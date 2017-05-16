@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
+import o.f.o.com.shareofo.net.common.ByteBuf;
 import o.f.o.com.shareofo.net.common.MyByteBuffer;
 import o.f.o.com.shareofo.net.common.Packet;
 import o.f.o.com.shareofo.utils.L;
@@ -18,20 +19,18 @@ public class PacketParser implements o.f.o.com.shareofo.net.common.PacketParser 
     Packet packet = new Packet();
 
     @Override
-    public Packet parsePacket(ByteBuffer buffer) {
+    public Packet parsePacket(ByteBuf buffer) {
 
         int HEADER_LEN = packet.HEADER_LEN;
-        byte[] rawHeaderData = new byte[HEADER_LEN];
-
-        MyByteBuffer myByteBuffer = new MyByteBuffer(buffer);
-        myByteBuffer.forRead();
-
 
         // 1.不足包头的长度
-        if (buffer.remaining() < HEADER_LEN) {
-            myByteBuffer.rewind();
+        if (buffer.length() < HEADER_LEN) {
             return null;
         }
+
+        byte[] rawHeaderData = new byte[HEADER_LEN];
+        buffer.mark();
+
         buffer.get(rawHeaderData); // 读出包头
 
         Packet packet = this.packet;
@@ -55,9 +54,8 @@ public class PacketParser implements o.f.o.com.shareofo.net.common.PacketParser 
         }
 
         // 包还没有接收完
-        if (buffer.remaining() < packet.getPackContentLen()) {
-            buffer.position(buffer.position() - HEADER_LEN); // 把已经读出的包头放回去
-            myByteBuffer.rewind();
+        if (buffer.length() < packet.getPackContentLen()) {
+            buffer.reset();
             return null; //  2;
         }
 
@@ -67,15 +65,15 @@ public class PacketParser implements o.f.o.com.shareofo.net.common.PacketParser 
 
             if (Arrays.hashCode(packData) != packet.getCheckBit()) {
                 buffer.clear();
-                L.get().e("tcp-", "content received error:" + Arrays.toString(packData));
+                // L.get().e("tcp-", "content received error:" + Arrays.toString(packData));
                 throw new RuntimeException("check failed");
             } else {
-                L.get().e("tcp-", "content received right:" + Arrays.toString(packData));
+                // L.get().e("tcp-", "content received right:" + Arrays.toString(packData));
             }
             packet.setPackData(packData);
         }
 
-        myByteBuffer.rewind();
+        buffer.rewind();
 
         this.packet = new Packet();
         return packet;

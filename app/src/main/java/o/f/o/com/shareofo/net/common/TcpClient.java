@@ -69,63 +69,17 @@ public class TcpClient {
                     clientSocketChannel.configureBlocking(false);
 
 
-                    // 创建选择器
-                    Selector selector = Selector.open();
-
-                    clientSocketChannel.register(selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE);
-
                     connection = new TcpConnection(clientSocketChannel, packetHandler, packetParser);
+
+
+                    TcpConnectionManager connectionManager = new TcpConnectionManager("cli");
+                    connectionManager.registerConnection(connection);
                     connection.setConnectionListener(connectionListener);
 
-                    // 反复循环,等待IO
-                    while (true) {
-                        // 等待某信道就绪(或超时)
-                        if (selector.select(timeout) == 0) {
-                            System.out.print("独自等待.");
-                            continue;
-                        }
-
-                        // 取得迭代器.selectedKeys()中包含了每个准备好某一I/O操作的信道的SelectionKey
-                        Iterator<SelectionKey> keyIter = selector.selectedKeys().iterator();
-
-                        while (keyIter.hasNext()) {
-                            SelectionKey key = keyIter.next();
-
-                            try {
-                                // if (key.isAcceptable()) {
-                                //     // 有客户端连接请求时
-                                //     protocol.handleAccept(key);
-                                // }
-
-                                synchronized (lock) {
-                                    if (connection != null) {
-                                        if (key.isReadable()) {
-                                            // 从客户端读取数据
-                                            connection.handleRead(key);
-                                        }
-
-                                        if (key.isValid() && key.isWritable()) {
-                                            // 客户端可写时
-                                            connection.handleWrite(key);
-                                        }
-                                    }
-                                }
-                            } catch (IOException ex) {
-                                // 出现IO异常（如客户端断开连接）时移除处理过的键
-                                throw ex;
-                            } catch (Exception ex) {
-                                // 出现IO异常（如客户端断开连接）时移除处理过的键
-                                continue;
-                            } finally {
-                                // 移除处理过的键
-                                keyIter.remove();
-                            }
-                        }
-                    }
                 } catch (Exception e) {
                     e.printStackTrace();
                 } finally {
-                    close();
+                    // close();
                 }
             }
         }.start();

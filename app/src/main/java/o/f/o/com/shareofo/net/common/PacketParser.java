@@ -9,7 +9,7 @@ import java.nio.ByteBuffer;
 public interface PacketParser {
     // int getHeaderLen();
 
-    Packet parsePacket(ByteBuffer buffer);
+    Packet parsePacket(ByteBuf buffer);
 
     // int parseHeader(byte[] rawHeaderData, Packet packet);
 }
