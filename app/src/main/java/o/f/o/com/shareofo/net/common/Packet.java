@@ -10,23 +10,23 @@ import java.util.Arrays;
  * Created by Administrator on 2017/5/5.
  */
 
-public class Packet {
-    public static final int HEADER_LEN = 12;
+public class Packet implements Cloneable {
+    public static final int HEADER_LEN = 14;
     public static final int MAX_PACK_LEN = 1024 * 1024;
 
     // header,一共6字节
     int packLen; // 4B, 包长,包括包头和包体
     short cmd;   // 2B
     short reqCode;   // 2B
-
+    short retCode;   // 2B
+    int checkBit; // hash 检验
 
     // content
     byte[] packData;
-    int checkBit; // hash 检验
+
 
     public Packet() {
     }
-
 
     public int getPackLen() {
         return packLen;
@@ -54,6 +54,15 @@ public class Packet {
 
     public void setReqCode(short reqCode) {
         this.reqCode = reqCode;
+    }
+
+
+    public void setRetCode(short retCode) {
+        this.retCode = retCode;
+    }
+
+    public short getRetCode() {
+        return retCode;
     }
 
     public int getCheckBit() {
@@ -85,6 +94,7 @@ public class Packet {
             dis.writeInt(packLen);
             dis.writeShort(cmd);
             dis.writeShort(reqCode);
+            dis.writeShort(retCode);
             dis.writeInt(checkBit);
 
             if (packData != null) {
@@ -110,4 +120,9 @@ public class Packet {
                 // .append(packData == null ? "" : new String(packData))
                 .toString();
     }
+    @Override
+    public Object clone() throws CloneNotSupportedException {
+        return (Packet)super.clone();
+    }
+
 }

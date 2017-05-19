@@ -1,12 +1,15 @@
 package o.f.o.com.shareofo;
 
+import android.app.ProgressDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -22,6 +25,7 @@ import android.widget.EditText;
 import android.widget.TextView;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import de.greenrobot.dao.query.QueryBuilder;
@@ -29,16 +33,19 @@ import o.f.o.com.shareofo.bean.Device;
 import o.f.o.com.shareofo.db.Db;
 import o.f.o.com.shareofo.db.dao.BicycleDao;
 import o.f.o.com.shareofo.db.model.BicycleData;
+import o.f.o.com.shareofo.net.ShareClientListener;
 import o.f.o.com.shareofo.net.ShareOfoClient;
 import o.f.o.com.shareofo.net.ShareOfoServer;
+import o.f.o.com.shareofo.net.ShareServerListener;
 import o.f.o.com.shareofo.net.bean.ShareRequestRequest;
+import o.f.o.com.shareofo.net.common.Packet;
 import o.f.o.com.shareofo.net.common.TcpConnection;
 import o.f.o.com.shareofo.net.handlers.ShareDataRequestHandler;
+import o.f.o.com.shareofo.utils.L;
 
 public class MainActivity extends AppCompatActivity implements
         View.OnClickListener,
-        View.OnLongClickListener,
-        ShareDataRequestHandler {
+        View.OnLongClickListener {
 
     private static final String TAG = "MainActivity-";
 
@@ -71,7 +78,9 @@ public class MainActivity extends AppCompatActivity implements
         handler = new Handler(searchThread.getLooper());
         // initWifiDirect();
 
-        ShareOfoServer.get().setShareDataRequestHandler(this);
+
+        ShareOfoServer.get().setShareServerListener(shareServerListener);
+        ShareOfoServer.get().setShareDataRequestHandler(shareDataRequestHandler);
         ShareOfoServer.get().startServer();
     }
 
@@ -193,6 +202,7 @@ public class MainActivity extends AppCompatActivity implements
         BicycleData ofoData = new BicycleData(code, password);
         BicycleDao dao = Db.get().getBicycleDao();
 
+        ofoData.setTime(new Date());
         if (dao.queryBuilder()
                 .where(BicycleDao.Properties.Code.eq(code))
                 .where(BicycleDao.Properties.Password.eq(password))
@@ -210,12 +220,6 @@ public class MainActivity extends AppCompatActivity implements
         Db.get().getBicycleDao().deleteAll();
         return true;
     }
-
-    @Override
-    public void onShardDataRequest(ShareRequestRequest request, TcpConnection connection) {
-
-    }
-
 
     class MainAdapter extends RecyclerView.Adapter<ViewHolder> {
         @Override
@@ -286,6 +290,8 @@ public class MainActivity extends AppCompatActivity implements
 
         @Override
         public void onClick(View v) {
+
+            ShareOfoClient.get().setClientListener(shareClientListener);
             ShareOfoClient.get().requestShareData(device.getIp(), ShareOfoServer.PORT);
             // lertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
             // uilder.setTitle("提示")
@@ -417,4 +423,123 @@ public class MainActivity extends AppCompatActivity implements
             });
         }
     }
+
+    ProgressDialog progressDialog;
+
+
+    ShareDataRequestHandler shareDataRequestHandler = new ShareDataRequestHandler() {
+        @Override
+        public void onShardDataRequest(ShareRequestRequest request, final Packet packet, final TcpConnection connection) {
+
+            AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this)
+                    .setTitle("分享数据请求")
+                    .setMessage("同意xxx的分享数据请求?")
+                    .setNegativeButton("拒绝", new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            ShareOfoServer.get().reject(packet, connection);
+                        }
+                    })
+                    .setPositiveButton("同意", new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            ShareOfoServer.get().agree(packet, connection);
+                        }
+                    });
+
+            builder.create().show();
+        }
+    };
+
+    ShareServerListener shareServerListener = new ShareServerListener() {
+
+        @Override
+        public void onTaskFinish(int code) {
+            progressDialog.dismiss();
+        }
+
+        @Override
+        public void onExportingData(int prog, int total) {
+            progressDialog = ProgressDialog.show(MainActivity.this, "请稍等", String.format("下在导出数据%d/%d", prog, total));
+            progressDialog.setOnCancelListener(new DialogInterface.OnCancelListener() {
+                @Override
+                public void onCancel(DialogInterface dialog) {
+
+                }
+            });
+            progressDialog.setCancelable(true);
+        }
+
+        @Override
+        public void onSendingData(int prog, int total) {
+            progressDialog.setMessage(String.format("发送数据%d/%d", prog, total));
+            L.get().e(TAG, String.format("发送数据%d/%d", prog, total));
+        }
+
+        @Override
+        public void onReceivingData(int prog, int total) {
+            progressDialog.setMessage(String.format("接收数据%d/%d", prog, total));
+            L.get().e(TAG, String.format("接收数据%d/%d", prog, total));
+        }
+    };
+
+    ShareClientListener shareClientListener = new ShareClientListener() {
+        @Override
+        public void onWaitingForAnswer() {
+            progressDialog = ProgressDialog.show(MainActivity.this, "请稍等", "");
+            progressDialog.setCancelable(true);
+            progressDialog.setOnCancelListener(
+                    new DialogInterface.OnCancelListener() {
+                        @Override
+                        public void onCancel(DialogInterface dialog) {
+                            progressDialog.dismiss();
+                            ShareOfoClient.get().close();
+                        }
+                    }
+            );
+            progressDialog.setMessage("等待对方同意...");
+        }
+
+        @Override
+        public void onRejected() {
+            progressDialog.setMessage("对方已拒绝");
+            L.get().e(TAG, "对方已拒绝");
+        }
+
+        @Override
+        public void onAccepted() {
+            progressDialog.setMessage("对方已同意");
+            L.get().e(TAG, "对方已同意");
+        }
+
+        @Override
+        public void onTaskFinish(int code) {
+            progressDialog.dismiss();
+            ShareOfoClient.get().close();
+        }
+
+        @Override
+        public void onExportingData(int prog, int total) {
+            progressDialog.setMessage(String.format("正在导出数据%d/%d", prog, total));
+            L.get().e(TAG, String.format("正在导出数据%d/%d", prog, total));
+        }
+
+        @Override
+        public void onWaitingServerExportingData(int prog, int total) {
+            progressDialog.setMessage(String.format("正在等待导出数据%d/%d", prog, total));
+            L.get().e(TAG, String.format("正在等待导出数据%d/%d", prog, total));
+        }
+
+        @Override
+        public void onSendingData(int prog, int total) {
+            progressDialog.setMessage(String.format("发送数据%d/%d", prog, total));
+            L.get().e(TAG, String.format("发送数据%d/%d", prog, total));
+        }
+
+        @Override
+        public void onReceivingData(int prog, int total) {
+            progressDialog.setMessage(String.format("接收数据%d/%d", prog, total));
+            L.get().e(TAG, String.format("接收数据%d/%d", prog, total));
+        }
+    };
 }

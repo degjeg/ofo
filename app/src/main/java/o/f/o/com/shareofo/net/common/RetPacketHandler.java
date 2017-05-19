@@ -8,7 +8,7 @@ public interface RetPacketHandler extends SendPacketHandler {
     int ERR_CONNECT_FAIL = -2;
     int ERR_CLOSED = -3;
 
-    void onGetReturnPacket(Packet pack);
+    void onGetReturnPacket(TcpConnection connection, Packet pack);
 
 
 }

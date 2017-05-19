@@ -16,5 +16,6 @@ public class App extends Application {
         Db.get().init(this);
         Db.get().init(this);
         T.init(this);
+
     }
 }

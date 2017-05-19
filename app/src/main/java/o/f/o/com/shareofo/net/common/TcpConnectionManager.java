@@ -70,7 +70,7 @@ public class TcpConnectionManager {
                     // 等待某信道就绪(或超时)
                     if (selector.select(100) == 0) {
                         System.out.print("独自等待.");
-                        Thread.sleep(3000);
+                        // Thread.sleep(3000);
                         continue;
                     }
 
@@ -122,7 +122,7 @@ public class TcpConnectionManager {
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
-                } catch (InterruptedException e) {
+                } catch (Exception e) {
                     e.printStackTrace();
                 }
             }

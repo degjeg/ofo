@@ -1,4 +1,4 @@
-package o.f.o.com.shareofo.net;
+package o.f.o.com.shareofo.net.bean;
 
 /**
  * Created by Administrator on 2017/4/21.

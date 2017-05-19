@@ -3,6 +3,7 @@ package o.f.o.com.shareofo.net.common;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
+import android.os.Message;
 import android.os.SystemClock;
 
 import java.io.IOException;
@@ -21,8 +22,8 @@ import o.f.o.com.shareofo.utils.L;
  * Created by Administrator on 2017/5/12.
  */
 
-public class TcpConnection implements Runnable {
-    public static final int WAIT_TIMEOUT = 800000;
+public class TcpConnection implements Runnable, Handler.Callback {
+    public static final int WAIT_TIMEOUT = 15000;
 
 
     public static final String TAG_ = "tcp-";
@@ -48,6 +49,7 @@ public class TcpConnection implements Runnable {
     ConnectionListener connectionListener;
     HandlerThread checkTimeoutThread; //  = new HandlerThread("chk_timeout");
     Handler handler;
+    Handler mainThreadHandler;
 
     // final Queue<DefRetPackHandler> pendingPackets = new LinkedBlockingDeque<>();
     final List<DefRetPackHandler> pendingPackets = Collections.synchronizedList(new ArrayList<DefRetPackHandler>());
@@ -66,6 +68,7 @@ public class TcpConnection implements Runnable {
         checkTimeoutThread = new HandlerThread("chk_timeout");
         checkTimeoutThread.start();
         handler = new Handler(checkTimeoutThread.getLooper());
+        mainThreadHandler = new Handler(Looper.getMainLooper(), this);
     }
 
     public void setPacketHandler(PacketHandler packetHandler) {
@@ -225,7 +228,8 @@ public class TcpConnection implements Runnable {
 
             if (packet != null) {
                 L.get().e(TAG, "after parse:packLen:" + packet.getPackLen() + " / recv:" + bytesRead + " / cache remaing:" + recvCache.length());
-                handlePack(packet);
+
+                mainThreadHandler.obtainMessage(1, packet).sendToTarget();
             } else {
                 break;
             }
@@ -243,7 +247,7 @@ public class TcpConnection implements Runnable {
                 if (pendingPackets.get(i).hasSent
                         && pendingPackets.get(i).reqPack.reqCode == packet.reqCode) {
                     if (pendingPackets.get(i).handler != null && (pendingPackets.get(i).handler instanceof RetPacketHandler)) {
-                        ((RetPacketHandler) pendingPackets.get(i).handler).onGetReturnPacket(packet);
+                        ((RetPacketHandler) pendingPackets.get(i).handler).onGetReturnPacket(this, packet);
                     }
 
                     pendingPackets.remove(i--);
@@ -285,7 +289,8 @@ public class TcpConnection implements Runnable {
                     if (pack.handler == null || !(pack.handler instanceof RetPacketHandler)) {
                         pendingPackets.remove(i--);
                     } else {
-                        pack.handler.onPackSent(pack.reqPack, this);
+                        mainThreadHandler.obtainMessage(3, pack).sendToTarget();
+                        // pack.handler.onPackSent(pack.reqPack, this);
                     }
                 }
             }
@@ -307,13 +312,29 @@ public class TcpConnection implements Runnable {
             for (int i = 0; i < pendingPackets.size(); i++) {
                 DefRetPackHandler pack = pendingPackets.get(i);
                 if (pack.isTimeout()) {
-                    if (pack.handler != null)
-                        pack.handler.onError(-1, null);
-                    pendingPackets.remove(i--);
+                    // if (pack.handler != null)
+                    //     pack.handler.onError(-1, null);
+                    mainThreadHandler.obtainMessage(2, pendingPackets.remove(i--)).sendToTarget();
                     pendingPackets.notifyAll();
                 }
             }
         }
+    }
+
+    @Override
+    public boolean handleMessage(Message msg) {
+        if (msg.what == 1) {
+            handlePack((Packet) msg.obj);
+        } else if (msg.what == 2) {
+            DefRetPackHandler pack = (DefRetPackHandler) msg.obj;
+            if (pack.handler != null)
+                pack.handler.onError(-1, null);
+        } else if (msg.what == 3) {
+            DefRetPackHandler pack = (DefRetPackHandler) msg.obj;
+            if (pack.handler != null)
+                pack.handler.onPackSent(pack.reqPack, this);
+        }
+        return true;
     }
 
     private static class DefRetPackHandler {

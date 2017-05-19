@@ -10,6 +10,8 @@ import com.squareup.wire.ProtoWriter;
 import com.squareup.wire.WireField;
 import com.squareup.wire.internal.Internal;
 import java.io.IOException;
+import java.lang.Integer;
+import java.lang.Long;
 import java.lang.Object;
 import java.lang.Override;
 import java.lang.String;
@@ -25,6 +27,12 @@ public final class OfoDate extends Message<OfoDate, OfoDate.Builder> {
 
   public static final String DEFAULT_PASSWORD = "";
 
+  public static final Long DEFAULT_TIME = 0L;
+
+  public static final Integer DEFAULT_DELETED = 0;
+
+  public static final String DEFAULT_DESC = "";
+
   @WireField(
       tag = 1,
       adapter = "com.squareup.wire.ProtoAdapter#STRING"
@@ -37,14 +45,35 @@ public final class OfoDate extends Message<OfoDate, OfoDate.Builder> {
   )
   public final String password;
 
-  public OfoDate(String code, String password) {
-    this(code, password, ByteString.EMPTY);
+  @WireField(
+      tag = 3,
+      adapter = "com.squareup.wire.ProtoAdapter#INT64"
+  )
+  public final Long time;
+
+  @WireField(
+      tag = 4,
+      adapter = "com.squareup.wire.ProtoAdapter#INT32"
+  )
+  public final Integer deleted;
+
+  @WireField(
+      tag = 5,
+      adapter = "com.squareup.wire.ProtoAdapter#STRING"
+  )
+  public final String desc;
+
+  public OfoDate(String code, String password, Long time, Integer deleted, String desc) {
+    this(code, password, time, deleted, desc, ByteString.EMPTY);
   }
 
-  public OfoDate(String code, String password, ByteString unknownFields) {
+  public OfoDate(String code, String password, Long time, Integer deleted, String desc, ByteString unknownFields) {
     super(ADAPTER, unknownFields);
     this.code = code;
     this.password = password;
+    this.time = time;
+    this.deleted = deleted;
+    this.desc = desc;
   }
 
   @Override
@@ -52,6 +81,9 @@ public final class OfoDate extends Message<OfoDate, OfoDate.Builder> {
     Builder builder = new Builder();
     builder.code = code;
     builder.password = password;
+    builder.time = time;
+    builder.deleted = deleted;
+    builder.desc = desc;
     builder.addUnknownFields(unknownFields());
     return builder;
   }
@@ -63,7 +95,10 @@ public final class OfoDate extends Message<OfoDate, OfoDate.Builder> {
     OfoDate o = (OfoDate) other;
     return unknownFields().equals(o.unknownFields())
         && Internal.equals(code, o.code)
-        && Internal.equals(password, o.password);
+        && Internal.equals(password, o.password)
+        && Internal.equals(time, o.time)
+        && Internal.equals(deleted, o.deleted)
+        && Internal.equals(desc, o.desc);
   }
 
   @Override
@@ -73,6 +108,9 @@ public final class OfoDate extends Message<OfoDate, OfoDate.Builder> {
       result = unknownFields().hashCode();
       result = result * 37 + (code != null ? code.hashCode() : 0);
       result = result * 37 + (password != null ? password.hashCode() : 0);
+      result = result * 37 + (time != null ? time.hashCode() : 0);
+      result = result * 37 + (deleted != null ? deleted.hashCode() : 0);
+      result = result * 37 + (desc != null ? desc.hashCode() : 0);
       super.hashCode = result;
     }
     return result;
@@ -83,6 +121,9 @@ public final class OfoDate extends Message<OfoDate, OfoDate.Builder> {
     StringBuilder builder = new StringBuilder();
     if (code != null) builder.append(", code=").append(code);
     if (password != null) builder.append(", password=").append(password);
+    if (time != null) builder.append(", time=").append(time);
+    if (deleted != null) builder.append(", deleted=").append(deleted);
+    if (desc != null) builder.append(", desc=").append(desc);
     return builder.replace(0, 2, "OfoDate{").append('}').toString();
   }
 
@@ -90,6 +131,12 @@ public final class OfoDate extends Message<OfoDate, OfoDate.Builder> {
     public String code;
 
     public String password;
+
+    public Long time;
+
+    public Integer deleted;
+
+    public String desc;
 
     public Builder() {
     }
@@ -104,9 +151,24 @@ public final class OfoDate extends Message<OfoDate, OfoDate.Builder> {
       return this;
     }
 
+    public Builder time(Long time) {
+      this.time = time;
+      return this;
+    }
+
+    public Builder deleted(Integer deleted) {
+      this.deleted = deleted;
+      return this;
+    }
+
+    public Builder desc(String desc) {
+      this.desc = desc;
+      return this;
+    }
+
     @Override
     public OfoDate build() {
-      return new OfoDate(code, password, super.buildUnknownFields());
+      return new OfoDate(code, password, time, deleted, desc, super.buildUnknownFields());
     }
   }
 
@@ -119,6 +181,9 @@ public final class OfoDate extends Message<OfoDate, OfoDate.Builder> {
     public int encodedSize(OfoDate value) {
       return (value.code != null ? ProtoAdapter.STRING.encodedSizeWithTag(1, value.code) : 0)
           + (value.password != null ? ProtoAdapter.STRING.encodedSizeWithTag(2, value.password) : 0)
+          + (value.time != null ? ProtoAdapter.INT64.encodedSizeWithTag(3, value.time) : 0)
+          + (value.deleted != null ? ProtoAdapter.INT32.encodedSizeWithTag(4, value.deleted) : 0)
+          + (value.desc != null ? ProtoAdapter.STRING.encodedSizeWithTag(5, value.desc) : 0)
           + value.unknownFields().size();
     }
 
@@ -126,6 +191,9 @@ public final class OfoDate extends Message<OfoDate, OfoDate.Builder> {
     public void encode(ProtoWriter writer, OfoDate value) throws IOException {
       if (value.code != null) ProtoAdapter.STRING.encodeWithTag(writer, 1, value.code);
       if (value.password != null) ProtoAdapter.STRING.encodeWithTag(writer, 2, value.password);
+      if (value.time != null) ProtoAdapter.INT64.encodeWithTag(writer, 3, value.time);
+      if (value.deleted != null) ProtoAdapter.INT32.encodeWithTag(writer, 4, value.deleted);
+      if (value.desc != null) ProtoAdapter.STRING.encodeWithTag(writer, 5, value.desc);
       writer.writeBytes(value.unknownFields());
     }
 
@@ -137,6 +205,9 @@ public final class OfoDate extends Message<OfoDate, OfoDate.Builder> {
         switch (tag) {
           case 1: builder.code(ProtoAdapter.STRING.decode(reader)); break;
           case 2: builder.password(ProtoAdapter.STRING.decode(reader)); break;
+          case 3: builder.time(ProtoAdapter.INT64.decode(reader)); break;
+          case 4: builder.deleted(ProtoAdapter.INT32.decode(reader)); break;
+          case 5: builder.desc(ProtoAdapter.STRING.decode(reader)); break;
           default: {
             FieldEncoding fieldEncoding = reader.peekFieldEncoding();
             Object value = fieldEncoding.rawProtoAdapter().decode(reader);

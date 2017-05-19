@@ -41,6 +41,7 @@ public class PacketParser implements o.f.o.com.shareofo.net.common.PacketParser 
             packet.setPackLen(dis.readInt());
             packet.setCmd(dis.readShort());
             packet.setReqCode(dis.readShort());
+            packet.setRetCode(dis.readShort());
             packet.setCheckBit(dis.readInt());
         } catch (IOException e) {
             // e.printStackTrace();

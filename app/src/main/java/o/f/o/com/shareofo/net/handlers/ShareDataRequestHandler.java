@@ -3,6 +3,7 @@ package o.f.o.com.shareofo.net.handlers;
 import java.nio.channels.SocketChannel;
 
 import o.f.o.com.shareofo.net.bean.ShareRequestRequest;
+import o.f.o.com.shareofo.net.common.Packet;
 import o.f.o.com.shareofo.net.common.TcpConnection;
 
 /**
@@ -10,5 +11,5 @@ import o.f.o.com.shareofo.net.common.TcpConnection;
  */
 
 public interface ShareDataRequestHandler {
-    void onShardDataRequest(ShareRequestRequest request, TcpConnection connection);
+    void onShardDataRequest(ShareRequestRequest request, Packet pack, TcpConnection connection);
 }
